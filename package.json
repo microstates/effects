@@ -1,0 +1,64 @@
+{
+  "name": "@microstates/effects",
+  "version": "1.0.0",
+  "description": "Structured, Concurrent Effects for JavaScript",
+  "repository": "http://github.com/microstates/effects",
+  "author": "Charles Lowell <cowboyd@frontside.io>",
+  "license": "MIT",
+  "private": false,
+  "scripts": {
+    "build": "pack build",
+    "prepare": "yarn build",
+    "publish": "pack publish",
+    "prepublishOnly": "yarn test && yarn build",
+    "test": "mocha --recursive -r ./tests/setup tests",
+    "test-types": "mocha -r ts-node/register types/*.test.ts",
+    "lint": "eslint ./"
+  },
+  "devDependencies": {
+    "@babel/core": "7.4.4",
+    "@babel/preset-env": "7.4.4",
+    "@babel/register": "7.4.4",
+    "@pika/pack": "0.3.7",
+    "@pika/plugin-build-node": "0.3.16",
+    "@pika/plugin-build-web": "0.3.16",
+    "@pika/plugin-copy-assets": "^0.3.16",
+    "@pika/plugin-standard-pkg": "0.3.16",
+    "@types/mocha": "^5.2.6",
+    "babel-eslint": "10.0.1",
+    "eslint": "5.16.0",
+    "eslint-plugin-prefer-let": "1.0.1",
+    "expect": "24.7.1",
+    "jest-mock": "^24.8.0",
+    "mocha": "6.1.4",
+    "ts-expect": "^1.1.0",
+    "ts-node": "^8.1.0",
+    "typescript": "^3.4.5"
+  },
+  "@pika/pack": {
+    "pipeline": [
+      [
+        "@pika/plugin-standard-pkg",
+        {
+          "exclude": [
+            "tests/**/*"
+          ]
+        }
+      ],
+      [
+        "@pika/plugin-build-node"
+      ],
+      [
+        "@pika/plugin-build-web"
+      ],
+      [
+        "@pika/plugin-copy-assets",
+        {
+          "files": [
+            "index.d.ts"
+          ]
+        }
+      ]
+    ]
+  }
+}

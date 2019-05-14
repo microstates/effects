@@ -1,0 +1,54 @@
+version: 2.1
+
+executors:
+  node:
+    docker:
+      - image: circleci/node:10
+
+commands:
+  yarn:
+    steps:
+      - restore_cache:
+          keys:
+            - v1-dependencies-{{ checksum "yarn.lock" }}
+            - v1-dependencies-
+
+      - run: yarn install
+
+      - save_cache:
+          paths:
+            - node_modules
+          key: v1-dependencies-{{ checksum "yarn.lock" }}
+
+jobs:
+  test:
+    executor: node
+    steps:
+      - checkout
+      - yarn
+      - run: yarn test
+
+  lint:
+    executor: node
+    steps:
+      - checkout
+      - yarn
+      - run: yarn lint
+
+  test-types:
+    executor: node
+    steps:
+      - checkout
+      - yarn
+      - run: yarn build
+      - run: cd pkg && yarn link
+      - run: yarn link @microstates/effects
+      - run: yarn test-types
+
+workflows:
+  version: 2.1
+  build:
+    jobs:
+      - test
+      - lint
+      - test-types
