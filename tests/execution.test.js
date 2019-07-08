@@ -1,20 +1,24 @@
 /* global describe, beforeEach, it */
 import mock from 'jest-mock';
 import expect from 'expect';
-import { Operation } from '../src/index';
+import { Execution } from '../src/execution';
 
-describe('Operation', () => {
+describe('Execution', () => {
   describe('for trivial generators', () => {
-    let operation;
+    let execution;
     let begin, middle, end, ensure;
 
     beforeEach(() => {
       begin = mock.fn();
       end = mock.fn();
-      operation = Operation.of(function* (arg) {
+      execution = Execution.of(function* (arg) {
         try {
           begin(arg);
-          middle = yield;
+          try {
+            middle = yield;
+          } catch (e) {
+            error = e;
+          }
           end();
           return 'this is the end';
         } finally {
@@ -23,16 +27,18 @@ describe('Operation', () => {
       });
     });
 
+    it('is idle', () => {
+      expect(execution.isIdle).toEqual(true);
+    });
     it('does not run the generator at all', () => {
       expect(begin).not.toHaveBeenCalled();
     });
 
     describe('starting the operation', () => {
       let object;
-      let execution;
       beforeEach(() => {
         object = {};
-        execution = operation.execute(object);
+        execution.start([object]);
       });
 
       it('is now running', () => {
@@ -54,7 +60,7 @@ describe('Operation', () => {
 
       describe('and then continuing it to completion', () => {
         beforeEach(() => {
-          execution = execution.resume("middle");
+          execution.resume("middle");
         });
         it('passes the resume value into the generator', () => {
           expect(middle).toEqual('middle');
@@ -78,7 +84,7 @@ describe('Operation', () => {
 
       describe('and halting it mid-way', () => {
         beforeEach(() => {
-          execution = execution.halt('please halt');
+          execution.halt('please halt');
         });
         it('is halted', () => {
           expect(execution.isHalted);
@@ -102,7 +108,7 @@ describe('Operation', () => {
         beforeEach(() => {
           error = new Error('an error occured');
           end = mock.fn(() => { throw error; });
-          execution = execution.resume();
+          execution.resume();
         });
         it('is an instance of errored', () => {
           expect(execution.isErrored).toEqual(true);
@@ -114,6 +120,72 @@ describe('Operation', () => {
           expect(execution.result).toEqual(error);
         });
       });
+
+      describe('causing the execution to fail programatically', () => {
+        let error;
+        beforeEach(() => {
+          try {
+            execution.fail(new Error('an error occured'));
+          } catch (e) {
+            error = e;
+          }
+        });
+        it('throws the error', () => {
+          expect(error).toBeUndefined();
+        });
+        it('transitions to an error state', () => {
+          expect(execution.isErrored).toEqual(true);
+        });
+      });
     });
   });
+
+  describe('An exceution that caches an exception and then yields again', () => {
+    let execution, error, boom;
+
+    function* generator() {
+      try {
+        yield;
+      } catch (e) {
+        error = e;
+      }
+
+      yield;
+    }
+
+    beforeEach(() => {
+      boom = new Error('boom!');
+      execution = Execution.of(generator);
+      execution.start();
+      execution.fail(boom);
+    });
+
+    it('raises the exception inside the generator', () => {
+      expect(error).toEqual(boom);
+    });
+
+    it('is still running', () => {
+      expect(execution.isRunning).toEqual(true);
+    });
+  });
+
+  describe('An execution that catches an exception and then is done', () => {
+    let execution;
+
+    beforeEach(() => {
+      execution = Execution.of(function*() {
+        try {
+          yield;
+        } catch (e) {
+          //catch the error;
+        }
+      });
+      execution.start();
+      execution.fail(new Error('boom!'));
+    });
+    it('is completed', () => {
+      expect(execution.isCompleted).toEqual(true);
+    });
+  });
+
 });
