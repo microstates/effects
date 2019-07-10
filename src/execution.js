@@ -8,10 +8,13 @@ export default class Execution {
 
   get isUnstarted() { return this.status instanceof Unstarted; }
   get isRunning() { return this.status instanceof Running; }
-  get isBlocking() { return this.isRunning || this.children.some(child => child.isBlocking); }
+  get isBlocking() { return this.isRunning || this.isWaiting; }
   get isCompleted() { return this.status instanceof Completed; }
   get isErrored() { return this.status instanceof Errored; }
   get isHalted() { return this.status instanceof Halted; }
+  get isWaiting() { return this.status instanceof Waiting; }
+
+  get hasBlockingChildren() { return this.children.some(child => child.isBlocking); }
 
   get result() { return this.status.result; }
 
@@ -36,6 +39,10 @@ export default class Execution {
 
   halt(message) {
     this.status.halt(message);
+  }
+
+  fork(task, ...args) {
+    this.status.fork(task, args);
   }
 }
 
@@ -69,7 +76,11 @@ class Running extends Status {
     try {
       let next = thunk(iterator);
       if (next.done) {
-        finalize(execution, new Completed(execution, next.value));
+        if (execution.hasBlockingChildren) {
+          execution.status = new Waiting(execution, next.value);
+        } else {
+          finalize(execution, new Completed(execution, next.value));
+        }
       } else {
         let control = controllerFor(next.value);
         control(execution);
@@ -95,6 +106,23 @@ class Running extends Status {
     let { execution, iterator } = this;
     iterator.return();
     finalize(execution, new Halted(execution, message));
+    // execution.children.forEach(child => {
+    //   if (child.isBlocking) {
+    //     child.halt(message);
+    //   }
+    // });
+  }
+
+  fork(task, args) {
+    let { execution }  = this;
+
+    let continuation = child => {
+
+    };
+
+    let child = new Execution(task, continuation);
+    execution.children.push(child);
+    child.start(args);
   }
 }
 
@@ -116,6 +144,19 @@ class Halted extends Status {
   constructor(execution, message) {
     super(execution);
     this.result = message;
+  }
+}
+
+class Waiting extends Completed {
+
+  halt(message) {
+    let { execution } = this;
+    execution.children.forEach(child => {
+      if (child.isBlocking) {
+        child.halt(message);
+      }
+    });
+    finalize(execution, new Halted(execution, message));
   }
 }
 

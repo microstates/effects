@@ -83,6 +83,17 @@ describe('Exec', () => {
       });
     });
 
+    describe('halting the outer execution', () => {
+      beforeEach(() => {
+        execution.halt('shut it down');
+      });
+
+      it.skip('halts the inner most child', () => {
+        expect(inner.isHalted).toEqual(true);
+        expect(inner.result).toEqual('shut it down');
+      });
+    });
+
   });
 
   describe('deeply nested task that throws an error', () => {
