@@ -1,5 +1,6 @@
 import isGeneratorFunction from './is-generator';
 import Task, { isTask } from './task';
+import Continuation from './continuation';
 
 export default class Execution {
   static of(task) {
@@ -11,6 +12,7 @@ export default class Execution {
   get isBlocking() { return this.isRunning || this.isWaiting; }
   get isCompleted() { return this.status instanceof Completed; }
   get isErrored() { return this.status instanceof Errored; }
+  get isHalting() { return this.status instanceof Halting; }
   get isHalted() { return this.status instanceof Halted; }
   get isWaiting() { return this.status instanceof Waiting; }
 
@@ -18,11 +20,12 @@ export default class Execution {
 
   get result() { return this.status.result; }
 
-  constructor(task, continuation) {
+  constructor(task, callback = x => x) {
     this.task = Task(task);
-    this.continuation = continuation;
+    this.callback = callback;
     this.status = new Unstarted(this);
     this.children = [];
+    this.continuation = ExecutionFinalized;
   }
 
   start(args) {
@@ -43,6 +46,21 @@ export default class Execution {
 
   fork(task, ...args) {
     this.status.fork(task, args);
+  }
+
+  then(...args) {
+    this.continuation = this.continuation.then(...args);
+    return this;
+  }
+
+  catch(...args) {
+    this.continuation = this.continuation.catch(...args);
+    return this;
+  }
+
+  finally(...args) {
+    this.continuation = this.continuation.finally(...args);
+    return this;
   }
 }
 
@@ -104,23 +122,19 @@ class Running extends Status {
 
   halt(message) {
     let { execution, iterator } = this;
+    execution.children.forEach(child => {
+      if (child.isBlocking) {
+        child.halt(message);
+      }
+    });
     iterator.return();
     finalize(execution, new Halted(execution, message));
-    // execution.children.forEach(child => {
-    //   if (child.isBlocking) {
-    //     child.halt(message);
-    //   }
-    // });
   }
 
   fork(task, args) {
     let { execution }  = this;
 
-    let continuation = child => {
-
-    };
-
-    let child = new Execution(task, continuation);
+    let child = new Execution(task, AsyncChild(execution));
     execution.children.push(child);
     child.start(args);
   }
@@ -147,10 +161,13 @@ class Halted extends Status {
   }
 }
 
+class Halting extends Halted {}
+
 class Waiting extends Completed {
 
   halt(message) {
     let { execution } = this;
+    execution.status = new Halting(execution, message);
     execution.children.forEach(child => {
       if (child.isBlocking) {
         child.halt(message);
@@ -160,9 +177,28 @@ class Waiting extends Completed {
   }
 }
 
+function AsyncChild(execution) {
+  return child => {
+    if (child.isHalted || child.isCompleted) {
+      if (!execution.hasBlockingChildren) {
+        finalize(execution, new Completed(execution, execution.result));
+      }
+    } else if (child.isErrored) {
+      execution.throw(child.result);
+    } else {
+      throw new Error('a finalized child must be either Halted, Errored, or Completed, not ' + child.status.constructor.name);
+    }
+  }
+}
+
 function finalize(execution, status) {
   execution.status = status;
-  execution.continuation(execution);
+  execution.callback(execution);
+  try {
+    execution.continuation.call(execution);
+  } catch (e) {
+    // console.warn('uncaught continuation error');
+  }
 }
 
 function controllerFor(value) {
@@ -176,26 +212,41 @@ function controllerFor(value) {
 }
 
 function call(task, ...args) {
-  return execution => {
-    let continuation = child => {
+  return parent => {
+    let callback = child => {
       if (child.isCompleted) {
-        if (execution.isRunning) {
-          return execution.resume(child.result);
-        } else if (execution.isWaiting) {
+        if (parent.isRunning) {
+          return parent.resume(child.result);
+        } else if (parent.isWaiting) {
           throw new Error('TODO');
         } else {
           throw new Error('TODO');
         }
-      } else if (child.isErrored) {
-        execution.throw(child.result);
-      } else if (child.isHalted) {
-        execution.throw(new Error(`Interuppted: ${child.result}`));
+      }  else if (child.isHalted) {
+        if (!parent.isHalting) {
+          parent.throw(new Error(`Interuppted: ${child.result}`));
+        }
       } else {
         throw new Error('TODO!');
       }
     };
-    let child = new Execution(task, continuation);
-    execution.children.push(child);
+
+    let child = new Execution(task)
+      .then(callback)
+      .catch(e => parent.throw(e));
+
+    parent.children.push(child);
     child.start(args);
   };
 }
+
+
+const ExecutionFinalized = Continuation.of(execution => {
+  if (execution.isErrored) {
+    let error = execution.result;
+    error.execution = execution;
+    throw error;
+  } else {
+    return execution;
+  }
+});
