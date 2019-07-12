@@ -125,7 +125,7 @@ describe('Async executon', () => {
 
   });
 
-  describe('with some synchronous tasks mixed in', () => {
+  describe('with a mixture of synchronous and asynchronous executions', () => {
     let execution, one, two, sync, boom, error;
     beforeEach(() => {
       error = undefined;
@@ -140,6 +140,66 @@ describe('Async executon', () => {
       expect(one).toBeDefined();
       expect(two).toBeDefined();
       expect(sync).toBeDefined();
+    });
+
+    describe('finishing the synchronous execution', () => {
+      beforeEach(() => {
+        sync.resume();
+      });
+
+      it('is still waiting on the async execution', () => {
+        expect(execution.isWaiting).toEqual(true);
+      });
+
+      describe('when the async portions complet', () => {
+        beforeEach(() => {
+          one.resume();
+          two.resume();
+        });
+        it('makes the whole execution complete', () => {
+          expect(execution.isCompleted).toEqual(true);
+        });
+      });
+    });
+
+    describe('finishing the async portion', () => {
+      beforeEach(() => {
+        one.resume();
+        two.resume();
+      });
+
+      it('is still running as it waits on the sync portion', () => {
+        expect(execution.isRunning).toEqual(true);
+      });
+
+      describe('. When the sync portion finally completes', () => {
+        beforeEach(() => {
+          sync.resume();
+        });
+        it('is a complete execution', () => {
+          expect(execution.isCompleted).toEqual(true);
+        });
+      });
+    });
+
+    describe('halting the async portion', () => {
+      beforeEach(() => {
+        one.halt();
+        two.halt();
+      });
+
+      it('is still running as it waits on the sync portion', () => {
+        expect(execution.isRunning).toEqual(true);
+      });
+
+      describe('then finishing the sync portion', () => {
+        beforeEach(() => {
+          sync.resume();
+        });
+        it('completes the whole enchilada', () => {
+          expect(execution.isCompleted).toEqual(true);
+        });
+      });
     });
 
     describe('throwing from within the synchronous task', () => {
