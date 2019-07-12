@@ -120,31 +120,34 @@ class Running extends Status {
     this.thunk(iterator => iterator.throw(error));
   }
 
+
+  // halt self
+  // halt children
+  // finalize self
   halt(message) {
     let { execution, iterator } = this;
+    iterator.return(message);
+    this.status = new Halted(execution, message);
     execution.children.forEach(child => {
       if (child.isBlocking) {
         child.halt(message);
       }
     });
-    iterator.return();
     finalize(execution, new Halted(execution, message));
   }
 
   fork(task, args) {
     let parent = this.execution;
 
-    let child = new Execution(task).then(child => {
-      if (child.isHalted || child.isCompleted) {
-        if (!parent.hasBlockingChildren) {
-          finalize(parent, new Completed(parent, parent.result));
-        }
-      } else {
-        throw new Error('a finalized child must be either Halted, Errored, or Completed, not ' + child.status.constructor.name);
+    let child = new Execution(task).then(() => {
+      if (!parent.hasBlockingChildren) {
+        finalize(parent, new Completed(parent, parent.result));
       }
     }).catch(e => parent.throw(e));
+
     parent.children.push(child);
     child.start(args);
+    return child;
   }
 }
 
@@ -187,12 +190,7 @@ class Waiting extends Completed {
 
 function finalize(execution, status) {
   execution.status = status;
-  execution.callback(execution);
-  try {
-    execution.continuation.call(execution);
-  } catch (e) {
-    // console.warn('uncaught continuation error');
-  }
+  execution.continuation.call(execution);
 }
 
 function controllerFor(value) {
