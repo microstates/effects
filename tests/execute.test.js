@@ -3,13 +3,18 @@
 /* eslint no-unreachable: 0 */
 
 import expect from 'expect';
+import mock from 'jest-mock';
 
 import { execute } from '../src/index';
 
 describe('Exec', () => {
   describe('deeply nested task', () => {
     let inner, execution, error;
+    let onSuccess, onError, onFinally;
     beforeEach(() => {
+      onSuccess = mock.fn(x => x);
+      onError = mock.fn(x => x);
+      onFinally = mock.fn(x => x);
       execution = execute(function*() {
         try {
           return yield function*() {
@@ -20,11 +25,17 @@ describe('Exec', () => {
         } catch (e) {
           error = e;
         }
-      });
+      })
     });
 
     it('calls all the way through to the inner child', () => {
       expect(inner).toBeDefined();
+    });
+
+    it('does not invoke any callback', () => {
+      expect(onSuccess).not.toHaveBeenCalled();
+      expect(onError).not.toHaveBeenCalled();
+      expect(onFinally).not.toHaveBeenCalled();
     });
 
     describe('resuming the inner child', () => {
@@ -120,4 +131,57 @@ describe('Exec', () => {
     });
   });
 
+  describe('callbacks', () => {
+    let execution, inner;
+
+    let onSuccess, onError, onFinally;
+
+    let id = x => x;
+
+    beforeEach(() => {
+      execution = execute(function*() {
+        return yield function*() {
+          return yield function*() {
+            return yield function*() {
+              return yield exec => inner = exec;
+            };
+          };
+        };
+      }).then(onSuccess = mock.fn(id))
+        .catch(onError = mock.fn(id))
+        .finally(onFinally = mock.fn(id));
+
+      expect(inner).toBeDefined();
+    });
+
+    it('does not invoke any of the callbacks', () => {
+      expect(onSuccess).not.toHaveBeenCalled();
+      expect(onError).not.toHaveBeenCalled();
+      expect(onFinally).not.toHaveBeenCalled();
+    });
+
+    describe('completing the innermost execution', () => {
+      beforeEach(() => {
+        inner.resume(10);
+      });
+
+      it('calls the success callback, and the finally callback, but not the error callback', () => {
+        expect(onSuccess).toHaveBeenCalledWith(execution);
+        expect(onError).not.toHaveBeenCalled();
+        expect(onFinally).toHaveBeenCalledWith(execution);
+      });
+    });
+
+    describe('throwing an error from within the inner-most execution', () => {
+      beforeEach(() => {
+        inner.throw(new Error('boom!'));
+      });
+
+      it('calls the error callback, and the finally callback, but not the success callback', () => {
+        expect(onError).toHaveBeenCalled();
+        expect(onSuccess).not.toHaveBeenCalled();
+        expect(onFinally).toHaveBeenCalledWith(execution);
+      });
+    });
+  });
 });

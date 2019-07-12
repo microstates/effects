@@ -50,7 +50,7 @@ export default class Continuation {
       try {
         return call(x);
       } finally {
-        fn();
+        fn(x);
       }
     }));
   }
@@ -58,5 +58,4 @@ export default class Continuation {
 
 function flatMap(continuation, sequence) {
   return continuation.flatMap(sequence);
-  // return sequence(continuation.call);
 }

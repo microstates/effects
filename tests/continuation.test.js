@@ -1,5 +1,6 @@
 /* global describe, beforeEach, it */
 import expect from 'expect';
+import mock from 'jest-mock';
 
 import Continuation from '../src/continuation';
 
@@ -120,4 +121,43 @@ describe('Continuation', () => {
     });
   });
 
+  describe('compound callbacks', () => {
+    let onSuccess, onError, onFinally;
+
+    let continuation, operation;
+    beforeEach(() => {
+      continuation = Continuation.of(x => operation(x))
+        .then(onSuccess = mock.fn(x => x))
+        .catch(onError = mock.fn(x => x))
+        .finally(onFinally = mock.fn(x => x));
+    });
+
+    describe('when the original operation succeeds', () => {
+      beforeEach(() => {
+        operation = x => x;
+        continuation.call(10);
+      });
+
+      it('invokes the success callback and the finally callback, but not the error callback', () => {
+        expect(onSuccess).toHaveBeenCalledWith(10);
+        expect(onError).not.toHaveBeenCalled();
+        expect(onFinally).toHaveBeenCalledWith(10);
+      });
+
+    });
+
+    describe('when the operation fails', () => {
+      beforeEach(() => {
+        operation = () => { throw new Error('operation failed'); };
+        continuation.call(10);
+      });
+
+      it('invokes the success callback and the finally callback, but not the error callback', () => {
+        expect(onSuccess).not.toHaveBeenCalled();
+        expect(onError).toHaveBeenCalled();
+        expect(onFinally).toHaveBeenCalledWith(10);
+      });
+    });
+
+  });
 });
