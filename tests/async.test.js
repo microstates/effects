@@ -124,4 +124,71 @@ describe('Async executon', () => {
     });
 
   });
+
+  describe('with some synchronous tasks mixed in', () => {
+    let execution, one, two, sync, boom, error;
+    beforeEach(() => {
+      error = undefined;
+      boom = new Error('boom!');
+      execution = execute(function*() {
+        this.fork(function*() { yield cxt => one = cxt; });
+        this.fork(function*() { yield cxt => two = cxt; });
+        yield function*() {
+          yield cxt => sync = cxt;
+        };
+      }).catch(e => error = e);
+      expect(one).toBeDefined();
+      expect(two).toBeDefined();
+      expect(sync).toBeDefined();
+    });
+
+    describe('throwing from within the synchronous task', () => {
+      beforeEach(() => {
+        sync.throw(boom);
+      });
+
+      it('errors out the top level execution', () => {
+        expect(execution.isErrored).toEqual(true);
+        expect(error).toEqual(boom);
+      });
+
+      it('halts the async children', () => {
+        expect(one.isHalted).toEqual(true);
+        expect(two.isHalted).toEqual(true);
+      });
+    });
+
+    describe('throwing from within one of the async tasks', () => {
+      beforeEach(() => {
+        one.throw(boom);
+      });
+
+      it('errors out the top level execution', () => {
+        expect(execution.isErrored).toEqual(true);
+        expect(error).toEqual(boom);
+      });
+
+      it('halts the async children', () => {
+        expect(two.isHalted).toEqual(true);
+        expect(sync.isHalted).toEqual(true);
+      });
+    });
+
+    describe('halting the top level execution', () => {
+      beforeEach(() => {
+        execution.halt();
+      });
+
+      it('does not throw an error', () => {
+        expect(error).toBeUndefined();
+      });
+
+      it('halts the execution, and all its children', () => {
+        expect(execution.isHalted).toEqual(true);
+        expect(one.isHalted).toEqual(true);
+        expect(two.isHalted).toEqual(true);
+        expect(sync.isHalted).toEqual(true);
+      });
+    });
+  });
 });

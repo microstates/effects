@@ -141,10 +141,10 @@ class Running extends Status {
         control(execution);
       }
     } catch (e) {
-      // error was not caught in the generator.
+      // error was thrown, but not caught in the generator.
+      this.status = new Errored(execution, e);
+      execution.children.forEach(child => child.halt(e));
       this.finalize(new Errored(execution, e));
-      // TODO: halt all children
-
     }
   }
 
