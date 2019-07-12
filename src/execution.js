@@ -102,6 +102,10 @@ class Status {
 
 }
 
+const Finalized = Status => class FinalizedStatus extends Status {
+  halt() {}
+};
+
 class Unstarted extends Status {
   start(args) {
     let { generator } = this.execution.task;
@@ -184,21 +188,21 @@ class Running extends Status {
   }
 }
 
-class Completed extends Status {
+class Completed extends Finalized(Status) {
   constructor(execution, result) {
     super(execution);
     this.result = result;
   }
 }
 
-class Errored extends Status {
+class Errored extends Finalized(Status) {
   constructor(execution, error) {
     super(execution);
     this.result = error;
   }
 }
 
-class Halted extends Status {
+class Halted extends Finalized(Status) {
   constructor(execution, message) {
     super(execution);
     this.result = message;
@@ -214,6 +218,15 @@ class Waiting extends Completed {
       child.halt(value);
     });
     this.finalize(new Halted(execution, value));
+  }
+
+  throw(error) {
+    let { execution } = this;
+    execution.status = new Errored(execution, error);
+    execution.children.forEach(child => {
+      child.halt(error);
+    });
+    this.finalize(new Errored(execution, error));
   }
 }
 

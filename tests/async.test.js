@@ -104,5 +104,24 @@ describe('Async executon', () => {
         expect(execution.isCompleted).toEqual(true);
       });
     });
+
+    describe('throwing an error in one of the children', () => {
+      let error, boom;
+      beforeEach(() => {
+        boom = new Error('boom!')
+        execution.catch(e => error = e);
+        one.throw(boom);
+      });
+
+      it('errors out the parent', () => {
+        expect(execution.isErrored).toEqual(true);
+        expect(error).toEqual(boom);
+      });
+
+      it('has the error as its result', () => {
+        expect(execution.result).toEqual(boom)
+      });
+    });
+
   });
 });
