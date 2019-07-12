@@ -68,6 +68,32 @@ class Status {
     this.execution = execution;
   }
 
+  start() {
+    this.cannot('start');
+  }
+
+  resume() {
+    this.cannot('resume');
+  }
+
+  throw() {
+    this.cannot('throw');
+  }
+
+  halt() {
+    this.cannot('halt');
+  }
+
+  fork() {
+    this.cannot('fork');
+  }
+
+  cannot(operationName) {
+    let name = this.constructor.name;
+    let message = `tried to perfom operation ${operationName}() on an execution with status '${name}'`;
+    throw new Error(`InvalidOperationError: ${message}`);
+  }
+
   finalize(status) {
     let { execution } = this;
     execution.status = status;
