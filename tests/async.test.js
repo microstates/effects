@@ -62,8 +62,9 @@ describe('Async executon', () => {
         beforeEach(() => {
           three.resume();
         });
-        it('considers the entire task complete', () => {
-          expect(execution.isCompleted).toEqual(true);
+        it('considers the entire task no longer waiting', () => {
+          expect(execution.isWaiting).toEqual(false);
+          expect(execution.isBlocking).toEqual(false);
         });
       });
     });
@@ -80,5 +81,28 @@ describe('Async executon', () => {
       });
     });
 
+
+    describe('halting one of the children', () => {
+      beforeEach(() => {
+        two.halt();
+      });
+      it('does not cancel anything else', () => {
+        expect(execution.isWaiting).toEqual(true);
+        expect(one.isRunning).toEqual(true);
+        expect(three.isRunning).toEqual(true);
+      });
+    });
+
+    describe('halting all of the children', () => {
+      beforeEach(() => {
+        one.halt();
+        two.halt();
+        three.halt();
+      });
+
+      it('completes the top-level execution', () => {
+        expect(execution.isCompleted).toEqual(true);
+      });
+    });
   });
 });

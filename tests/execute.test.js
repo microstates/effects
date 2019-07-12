@@ -99,7 +99,7 @@ describe('Exec', () => {
         execution.halt('shut it down');
       });
 
-      it.skip('halts the inner most child', () => {
+      it('halts the inner most child', () => {
         expect(inner.isHalted).toEqual(true);
         expect(inner.result).toEqual('shut it down');
       });

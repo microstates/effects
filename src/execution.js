@@ -134,11 +134,9 @@ class Running extends Status {
   halt(value) {
     let { execution, iterator } = this;
     iterator.return(value);
-    this.status = new Halted(execution, value);
+    execution.status = new Halted(execution, value);
     execution.children.forEach(child => {
-      if (child.isBlocking) {
-        child.halt(value);
-      }
+      child.halt(value);
     });
     this.finalize(new Halted(execution, value));
   }
@@ -183,15 +181,13 @@ class Halted extends Status {
 
 class Waiting extends Completed {
 
-  halt(message) {
+  halt(value) {
     let { execution } = this;
-    execution.status = new Halted(execution, message);
+    execution.status = new Halted(execution, value);
     execution.children.forEach(child => {
-      if (child.isBlocking) {
-        child.halt(message);
-      }
+      child.halt(value);
     });
-    this.finalize(new Halted(execution, message));
+    this.finalize(new Halted(execution, value));
   }
 }
 
@@ -211,8 +207,13 @@ function call(task, ...args) {
       if (child.isCompleted) {
         return parent.resume(child.result);
       }
-      if (child.isHalted) {
-        parent.throw(new Error(`Interuppted: ${child.result}`));
+
+      // call() is synchronous so the parent is waiting for the
+      // return value of the child. If the child is halted, and the
+      // parent is still running, that means its waiting on the child
+      // and so it's an error because the child was interupted
+      if (child.isHalted && parent.isRunning) {
+        return parent.throw(new Error(`Interupted: ${child.result}`));
       }
     }).catch(e => parent.throw(e));
 
