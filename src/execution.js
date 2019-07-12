@@ -132,10 +132,18 @@ class Running extends Status {
   }
 
   fork(task, args) {
-    let { execution }  = this;
+    let parent = this.execution;
 
-    let child = new Execution(task, AsyncChild(execution));
-    execution.children.push(child);
+    let child = new Execution(task).then(child => {
+      if (child.isHalted || child.isCompleted) {
+        if (!parent.hasBlockingChildren) {
+          finalize(parent, new Completed(parent, parent.result));
+        }
+      } else {
+        throw new Error('a finalized child must be either Halted, Errored, or Completed, not ' + child.status.constructor.name);
+      }
+    }).catch(e => parent.throw(e));
+    parent.children.push(child);
     child.start(args);
   }
 }
@@ -177,20 +185,6 @@ class Waiting extends Completed {
   }
 }
 
-function AsyncChild(execution) {
-  return child => {
-    if (child.isHalted || child.isCompleted) {
-      if (!execution.hasBlockingChildren) {
-        finalize(execution, new Completed(execution, execution.result));
-      }
-    } else if (child.isErrored) {
-      execution.throw(child.result);
-    } else {
-      throw new Error('a finalized child must be either Halted, Errored, or Completed, not ' + child.status.constructor.name);
-    }
-  }
-}
-
 function finalize(execution, status) {
   execution.status = status;
   execution.callback(execution);
@@ -213,27 +207,14 @@ function controllerFor(value) {
 
 function call(task, ...args) {
   return parent => {
-    let callback = child => {
+    let child = new Execution(task).then(child => {
       if (child.isCompleted) {
-        if (parent.isRunning) {
-          return parent.resume(child.result);
-        } else if (parent.isWaiting) {
-          throw new Error('TODO');
-        } else {
-          throw new Error('TODO');
-        }
-      }  else if (child.isHalted) {
-        if (!parent.isHalting) {
-          parent.throw(new Error(`Interuppted: ${child.result}`));
-        }
-      } else {
-        throw new Error('TODO!');
+        return parent.resume(child.result);
       }
-    };
-
-    let child = new Execution(task)
-      .then(callback)
-      .catch(e => parent.throw(e));
+      if (child.isHalted) {
+        parent.throw(new Error(`Interuppted: ${child.result}`));
+      }
+    }).catch(e => parent.throw(e));
 
     parent.children.push(child);
     child.start(args);
