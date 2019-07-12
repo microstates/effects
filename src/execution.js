@@ -12,7 +12,6 @@ export default class Execution {
   get isBlocking() { return this.isRunning || this.isWaiting; }
   get isCompleted() { return this.status instanceof Completed; }
   get isErrored() { return this.status instanceof Errored; }
-  get isHalting() { return this.status instanceof Halting; }
   get isHalted() { return this.status instanceof Halted; }
   get isWaiting() { return this.status instanceof Waiting; }
 
@@ -68,6 +67,13 @@ class Status {
   constructor(execution) {
     this.execution = execution;
   }
+
+  finalize(status) {
+    let { execution } = this;
+    execution.status = status;
+    execution.continuation.call(execution);
+  }
+
 }
 
 class Unstarted extends Status {
@@ -97,7 +103,8 @@ class Running extends Status {
         if (execution.hasBlockingChildren) {
           execution.status = new Waiting(execution, next.value);
         } else {
-          finalize(execution, new Completed(execution, next.value));
+          this.finalize(new Completed(execution, next.value));
+
         }
       } else {
         let control = controllerFor(next.value);
@@ -105,7 +112,7 @@ class Running extends Status {
       }
     } catch (e) {
       // error was not caught in the generator.
-      finalize(execution, new Errored(execution, e));
+      this.finalize(new Errored(execution, e));
       // TODO: halt all children
 
     }
@@ -124,24 +131,26 @@ class Running extends Status {
   // halt self
   // halt children
   // finalize self
-  halt(message) {
+  halt(value) {
     let { execution, iterator } = this;
-    iterator.return(message);
-    this.status = new Halted(execution, message);
+    iterator.return(value);
+    this.status = new Halted(execution, value);
     execution.children.forEach(child => {
       if (child.isBlocking) {
-        child.halt(message);
+        child.halt(value);
       }
     });
-    finalize(execution, new Halted(execution, message));
+    this.finalize(new Halted(execution, value));
   }
 
   fork(task, args) {
     let parent = this.execution;
 
     let child = new Execution(task).then(() => {
-      if (!parent.hasBlockingChildren) {
-        finalize(parent, new Completed(parent, parent.result));
+      //TODO: what if parent is still running, eh?
+      //TODO: write a test and uncomment that condition.
+      if (/*parent.isWaiting && */ !parent.hasBlockingChildren) {
+        this.finalize(new Completed(parent, parent.result));
       }
     }).catch(e => parent.throw(e));
 
@@ -172,25 +181,18 @@ class Halted extends Status {
   }
 }
 
-class Halting extends Halted {}
-
 class Waiting extends Completed {
 
   halt(message) {
     let { execution } = this;
-    execution.status = new Halting(execution, message);
+    execution.status = new Halted(execution, message);
     execution.children.forEach(child => {
       if (child.isBlocking) {
         child.halt(message);
       }
     });
-    finalize(execution, new Halted(execution, message));
+    this.finalize(new Halted(execution, message));
   }
-}
-
-function finalize(execution, status) {
-  execution.status = status;
-  execution.continuation.call(execution);
 }
 
 function controllerFor(value) {
