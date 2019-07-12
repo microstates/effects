@@ -19,9 +19,8 @@ export default class Execution {
 
   get result() { return this.status.result; }
 
-  constructor(task, callback = x => x) {
+  constructor(task) {
     this.task = Task(task);
-    this.callback = callback;
     this.status = new Unstarted(this);
     this.children = [];
     this.continuation = ExecutionFinalized;
