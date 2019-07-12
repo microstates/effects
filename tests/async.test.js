@@ -251,4 +251,30 @@ describe('Async executon', () => {
       });
     });
   });
+
+  describe('A parent that block, but also has an async child', () => {
+    let parent, child;
+    beforeEach(() => {
+      parent = execute(function*() {
+        this.fork(function*() { yield cxt => child = cxt; });
+        yield x => x;
+      });
+    });
+
+    it('starts out as running', () => {
+      expect(parent.isRunning).toEqual(true);
+    });
+
+    describe('when the async child finishes', () => {
+      beforeEach(() => {
+        child.resume();
+      });
+
+      it('keeps the parent running because it is still yielding on its own', () => {
+        expect(parent.isRunning).toEqual(true);
+      });
+    });
+
+  });
+
 });

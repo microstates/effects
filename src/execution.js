@@ -156,10 +156,6 @@ class Running extends Status {
     this.thunk(iterator => iterator.throw(error));
   }
 
-
-  // halt self
-  // halt children
-  // finalize self
   halt(value) {
     let { execution, iterator } = this;
     iterator.return(value);
@@ -174,9 +170,7 @@ class Running extends Status {
     let parent = this.execution;
 
     let child = new Execution(task).then(() => {
-      //TODO: what if parent is still running, eh?
-      //TODO: write a test and uncomment that condition.
-      if (/*parent.isWaiting && */ !parent.hasBlockingChildren) {
+      if (parent.isWaiting && !parent.hasBlockingChildren) {
         this.finalize(new Completed(parent, parent.result));
       }
     }).catch(e => parent.throw(e));
